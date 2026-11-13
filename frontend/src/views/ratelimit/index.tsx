@@ -73,10 +73,15 @@ export default function RatelimitView() {
     try {
       const response = await request(`${ENDPOINT}/${row.id}/actions`, {
         method: 'POST',
-        body: JSON.stringify({ action }),
+        // 携带读取快照中的版本号；后端基于过期快照调整额度时会返回冲突回执。
+        body: JSON.stringify({ values: { action }, version: row.version ?? null }),
       })
       if (!response.ok) {
         throw new Error('限速控制动作未生效，请稍后重试')
+      }
+      const payload = await response.json()
+      if (payload.ok === false) {
+        throw new Error(payload.message ?? '限速控制动作未生效，请刷新后重试')
       }
       await reload()
     } catch (error) {

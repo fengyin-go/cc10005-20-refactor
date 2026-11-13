@@ -26,6 +26,32 @@ class EntryPayload(BaseModel):
 
     values: dict[str, Any] = Field(default_factory=dict)
     remark: str | None = None
+    # 乐观锁版本：携带时仓库会校验快照是否过期；不携带时保持旧调用方式可用。
+    version: int | None = None
+
+
+class AdjustmentItem(BaseModel):
+    """跨资源整体调整中的单项：指向一条具体记录并携带快照版本。"""
+
+    module: str
+    entry_id: int
+    version: int | None = None
+    action: str | None = None
+    fields: dict[str, Any] = Field(default_factory=dict)
+
+
+class AdjustmentPayload(BaseModel):
+    """代理池与限速控制的联动调整清单，整体确认或整体撤销。"""
+
+    adjustments: list[AdjustmentItem] = Field(default_factory=list)
+    remark: str | None = None
+
+
+class AdjustmentResult(BaseModel):
+    ok: bool
+    message: str
+    resources: dict[str, Any] | None = None
+    count: int = 0
 
 
 

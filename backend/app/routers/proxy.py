@@ -30,6 +30,17 @@ def list_entries(
     return PageResult(items=items, total=total, page=page, size=size)
 
 
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出代理池管理清单：返回当前过滤条件下的全量数据。
+
+    该静态路径必须声明在 ``/{entry_id}`` 之前，否则 "export" 会被当成 entry_id
+    做整数解析而返回 422。
+    """
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "proxy", "total": total, "items": items}
+
+
 @router.get("/{entry_id}", response_model=dict)
 def get_entry(entry_id: int) -> dict:
     """读取单条代理节点明细；不存在时给出可读的错误说明。"""
@@ -50,16 +61,22 @@ def create_entry(payload: EntryPayload) -> ActionResult:
 
 @router.post("/{entry_id}/actions", response_model=ActionResult)
 def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
-    """对单条代理节点执行标记可用、标记不可用、移除节点；不允许的动作会被拦下并说明原因。"""
+    """对单条代理节点执行标记可用、标记不可用、移除节点；不允许的动作会被拦下并说明原因。
+
+    可在请求体携带 ``version``：基于过期快照回收节点时会收到版本冲突回执，
+    不携带版本时沿用旧调用方式。
+    """
     action = str(payload.values.get("action") or "").strip()
-    entry, message = service.run_action(entry_id, action)
+    entry, message = service.run_action(entry_id, action, payload.version)
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
 
 
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出代理池管理清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "proxy", "total": total, "items": items}
+@router.put("/{entry_id}", response_model=ActionResult)
+def update_entry(entry_id: int, payload: EntryPayload) -> ActionResult:
+    """按快照版本编辑代理节点业务字段；系统字段由服务规则维护，不接受外部覆盖。"""
+    entry, message = service.update_entry(entry_id, payload.values, payload.version)
+    if entry is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=entry)
